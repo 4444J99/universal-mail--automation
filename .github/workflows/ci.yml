@@ -174,6 +174,12 @@ jobs:
       - name: Probe estate vault
         run: python3 scripts/verify_vault_sync.py
 
+  # Deploys the Cloudflare share demo. Trigger is intentionally and only a
+  # push to main (never PRs or lane pushes): the smoke test hits the live URL,
+  # so deploying arbitrary heads would race the production state. It is
+  # additionally gated on CLOUDFLARE_API_TOKEN below; without that secret the
+  # job emits an explicit skip notice instead of failing the run. This is the
+  # reason every lane-branch run in the historical log "skips" the deploy job.
   cloudflare-share-deploy:
     name: Deploy Cloudflare share demo
     runs-on: ubuntu-latest
@@ -196,12 +202,22 @@ jobs:
       - name: Check deploy credentials
         id: deploy_credentials
         run: |
+          echo "deploy_target=${{ github.ref }}" >> "$GITHUB_OUTPUT"
           if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CLOUDFLARE_API_TOKEN is not configured; skipping Cloudflare deploy."
+            echo "::notice::CLOUDFLARE_API_TOKEN is not configured; skipping Cloudflare deploy (token gated)."
           fi
+
+      - name: Report skip reason
+        if: steps.deploy_credentials.outputs.available != 'true'
+        run: |
+          echo "::group::Cloudflare deploy skipped"
+          echo "skip_reason=CLOUDFLARE_API_TOKEN unset at repo/org level"
+          echo "trigger=main push only; this run is on ${{ steps.deploy_credentials.outputs.deploy_target }}"
+          echo "documented_in=.github/workflows/ci.yml cloudflare-share-deploy (IRF-III-062)"
+          echo "::endgroup::"
 
       - name: Deploy Worker
         if: steps.deploy_credentials.outputs.available == 'true'

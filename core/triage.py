@@ -67,6 +67,7 @@ class TriageItem:
     dossier: ResearchDossier
     escalation: Optional[EscalationResult] = None
     suggested_draft: Optional[str] = None
+    pending_draft: bool = False
     rank: int = 0
 
     @property
@@ -94,6 +95,7 @@ class TriageItem:
             "needs_action": self.needs_action,
             "research": self.dossier.to_dict(),
             "suggested_draft": self.suggested_draft,
+            "pending_draft": self.pending_draft,
         }
 
 
@@ -236,9 +238,10 @@ def _render_text(items: List[TriageItem]) -> str:
     for it in items:
         vip = "[VIP] " if it.is_vip else ""
         esc = " ↑escalated" if it.escalation and it.escalation.should_escalate else ""
+        grave = " ⚑draft-not-sent" if it.pending_draft else ""
         out.append(
             f"#{it.rank:>2} [{it.priority_score:5.1f}] Tier {it.tier} "
-            f"({it.tier_name}){esc}  {vip}{it.label}"
+            f"({it.tier_name}){esc}{grave}  {vip}{it.label}"
         )
         out.append(f"      From: {it.message.sender[:60]}")
         out.append(f"      Subj: {it.message.subject[:60]}")
@@ -262,10 +265,11 @@ def _render_markdown(items: List[TriageItem]) -> str:
            "|---|-------|------|-----|-------|--------|---------|---------|"]
     for it in items:
         vip = "⭐" if it.is_vip else ""
+        grave = " ⚑" if it.pending_draft else ""
         ctx = _ctx_line(it.dossier).replace("|", "/")
         out.append(
             f"| {it.rank} | {it.priority_score:.1f} | {it.tier} ({it.tier_name}) "
-            f"| {vip} | {it.label} | {it.message.sender[:30]} "
+            f"| {vip}{grave} | {it.label} | {it.message.sender[:30]} "
             f"| {it.message.subject[:40]} | {ctx} |"
         )
     drafts = [it for it in items if it.suggested_draft]

@@ -22,7 +22,7 @@ import secrets
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING, Set
 
 if TYPE_CHECKING:
     from core.audit import AuditLog
@@ -1077,6 +1077,7 @@ def cmd_triage(args: argparse.Namespace) -> int:
 
     logger.info(f"Triaging mailbox (provider: {provider.name})")
 
+    draft_keys: Set[str] = set()
     with provider:
         list_result = provider.list_messages(query=args.query, limit=args.limit)
         if not list_result.messages:
@@ -1087,9 +1088,18 @@ def cmd_triage(args: argparse.Namespace) -> int:
 
         messages = [m for m in details.values() if m]
 
+        if args.sweep_drafts:
+            from core.draft_graveyard import pending_draft_keys
+            draft_result = provider.list_messages(query="in:draft", limit=args.limit)
+            draft_keys = pending_draft_keys(draft_result.messages or [])
+
     # Bodies are sourced from whatever the provider populated (snippet/body);
     # research degrades gracefully to subject-only when none is available.
     items = triage_messages(messages, voice=voice, draft=args.draft)
+
+    if args.sweep_drafts:
+        from core.draft_graveyard import mark_pending_drafts
+        items = mark_pending_drafts(items, draft_keys)
 
     if args.top and args.top > 0:
         items = items[: args.top]
@@ -3581,6 +3591,12 @@ Examples:
     triage_parser.add_argument(
         "--name",
         help="User's name for the draft signature",
+    )
+    triage_parser.add_argument(
+        "--sweep-drafts",
+        action="store_true",
+        help="Scan in:draft artifacts, mark threads with an unanswered draft "
+             "(drafts-graveyard) and rank them first",
     )
     triage_parser.set_defaults(func=cmd_triage)
 

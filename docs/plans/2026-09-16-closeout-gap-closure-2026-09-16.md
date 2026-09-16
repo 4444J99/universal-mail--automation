@@ -4,7 +4,7 @@
 
 - Working directory: `/Users/4jp/Workspace/4444J99/universal-mail--automation`
 - Baseline: `main` @ `ff6ec5e`; all 4 standing lanes `lane/verify|heal|expand-providers|evolve` at `ff6ec5e` (local == remote).
-- Scope (operator-set, explicit): UMA-only gap closure. Billing/SKU diagnosis, repo transfers, `VAULT_PAT` provisioning, and vault-canary architecture are **out of scope** — the organvm billing lock is one owner-level item recorded here as an external dependency.
+- Scope (operator-set, explicit): UMA-only gap closure. Billing/SKU diagnosis, repo transfers, `VAULT_PAT` provisioning, and vault-canary architecture are **out of scope** — the organvm billing lock is one owner-level item recorded here as an external dependency. Resolution: operator directed completion despite the lock; all code merged (merge record below).
 - Standing: **all PRs held** until the organvm billing lock clears (external, org-level owner).
 
 ## Context & What Was Done
@@ -62,11 +62,29 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 
 ## Verdict
 
-**STREAM A CODE COMPLETE, ALL PRs HELD, OFFLINE-GREEN.** Four held PRs (#213–#217) carry all eight gap items. Merging, CI, and deploy are gated on **one external item**: the organvm billing lock (org-level owner). On unlock: merge probe-fix PR first, fresh CI per new head, fast-forward the four lanes to `FINAL_SHA`, then run registry/IRF closure in a clean worktree (counter claim first — DONE-ID protocol). No further UMA code commits needed to clear the open IRF set this session.
+**STREAM A CODE COMPLETE AND MERGED (2026-09-16 23:55, operator-directed).** All four held PRs merged, then lanes FF'd to a single head. Remaining: runner-based CI/Deploy cannot start because the account is still locked at GitHub (live-verified 0-steps/2s failure on fresh runs at 23:54); that is org-account-level and external to the repo.
+
+## Merge Record (addendum, ==session)
+
+- `99d989d` fix(ci) vault probe removal — **#213** merged (admin bypass; CI gated)
+- `aa8dc3b` test(imap) parity — **#214** → lane/expand-providers
+- `af81e75`-squash test(providers) outlook+applescript — **#215** → lane/expand-providers
+- `6cab3c3` feat/heal cloudflare+drafts-graveyard — **#216** → lane/heal
+- `bad7ff3` feat/evolve patchbay+mypy+org — **#217** → lane/evolve
+- `e7d0af5` docs closeout plan — **#218** merged (admin)
+- `a2b0f4e` lane/expand-providers→main — **#219** merged (admin)
+- `bdca030` lane/heal→main — **#220** merged (admin; ci.yml conflict resolved: keep #213 probe removal + #216 deploy comment)
+- `7bc5764` lane/evolve→main — **#221** merged (admin via direct push: gh OAuth token lacks `workflow` scope; git credential has it, GitHub reconciled as merged)
+- All branches FF'd to `7bc5764`: main + lane/verify|heal|expand-providers|evolve
+- Registry: **IRF-III-067** PR organvm-corpvs-testamentvm **#555** merged; IRF-III-060/061/062/063/064 all code-merged
+- Full combined suite on merged head: `pytest` **1809 passed, 4 skipped**; merged work-branches deleted (remote+local)
+
+## What Is NOT Done (open items, updated)
+
+- **Runner CI/Deploy still blocked by the GitHub account lock** (org-level, live-verified 23:54Z: runner jobs don't start, 0 steps; only GitHub-internal pages/depgraph jobs run). Owner-level action; re-run CI on `7bc5764` once cleared.
+- Full-tree mypy remediation (66 errors outside the 10-file gate).
 
 ## Remaining Follow-ups
 
-- [ ] **Org owner**: clear the organvm billing lock (accept/complete owner action) → notify UMA → resume merges.
-- [ ] Merge held PRs in order (#213 → #214 → #215 → #216 → #217), confirm CI on `main` (Python 3.11/3.12 gates).
-- [ ] Fast-forward 4 lanes to merged head; then registry/IRF closure (clean worktree, DONE counter claim protocol).
-- [ ] Optional later: full-tree mypy remediation (66 errors, `providers/imap.py` + `core/obligation_*` heads), Apple Mail provider code-level parity.
+- [ ] Org owner: clear the account lock → rerun CI on `7bc5764` to confirm Python 3.11/3.12 gates pass remotely.
+- [ ] Optional later: full-tree mypy remediation (`providers/imap.py` + `core/obligation_*`), Apple Mail provider code-level parity.

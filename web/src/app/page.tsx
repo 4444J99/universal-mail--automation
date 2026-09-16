@@ -1,4 +1,4 @@
-import { unstable_cache } from 'next/cache';
+import { ClientHydration } from '../components/ClientHydration';
 
 type LabelCount = Record<string, number>;
 type LabelerStats = {
@@ -22,7 +22,6 @@ async function fetchVaultState(): Promise<LabelerStats | null> {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
       },
-      next: { revalidate: 300 },
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -33,29 +32,11 @@ async function fetchVaultState(): Promise<LabelerStats | null> {
   }
 }
 
-async function fetchLocalState(): Promise<LabelerStats | null> {
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  const statePath = path.join(process.cwd(), '../labeler_state.json');
-  try {
-    const content = await fs.readFile(statePath, 'utf8');
-    return JSON.parse(content) as LabelerStats;
-  } catch {
-    return null;
-  }
+async function getLabelerStats() {
+  const vault = await fetchVaultState();
+  if (vault) return { source: 'vault' as const, data: vault };
+  return { source: 'none' as const, data: null };
 }
-
-const getLabelerStats = unstable_cache(
-  async () => {
-    const vault = await fetchVaultState();
-    if (vault) return { source: 'vault' as const, data: vault };
-    const local = await fetchLocalState();
-    if (local) return { source: 'local' as const, data: local };
-    return { source: 'none' as const, data: null };
-  },
-  ['labeler-stats'],
-  { revalidate: 300, tags: ['labeler'] }
-);
 
 const labelToTier: Record<string, number> = {
   "Dev/GitHub": 2, "Dev/Code-Review": 2, "Dev/Infrastructure": 3, "Dev/GameDev": 3,
@@ -84,7 +65,7 @@ export default async function Dashboard() {
   const stats = data || { history: {} };
   const tierCounts = computeTierCounts(stats.history);
   const lastSync = stats.last_run ? new Date(stats.last_run).toLocaleString() : 'never';
-  const sourceLabel = source === 'vault' ? 'Estate Vault (ISR)' : source === 'local' ? 'Local File (dev)' : 'No Data';
+  const sourceLabel = source === 'vault' ? 'Estate Vault (ISR)' : 'No Data';
 
   return (
     <main className="min-h-screen p-8 bg-gray-50 text-gray-900 font-sans">
@@ -134,7 +115,7 @@ export default async function Dashboard() {
               ))}
             {Object.keys(stats.history || {}).length === 0 && (
               <li className="px-6 py-8 text-center text-gray-500">
-                No data available — {source === 'none' ? 'run vault sync or labeler' : 'run labeler to populate'}
+                No data available — run vault sync or labeler
               </li>
             )}
           </ul>
@@ -143,41 +124,5 @@ export default async function Dashboard() {
         <ClientHydration source={sourceLabel} />
       </div>
     </main>
-  );
-}
-
-'use client';
-
-import { useEffect, useState, useRef } from 'react';
-
-interface ClientHydrationProps {
-  source: string;
-}
-
-function ClientHydration({ source }: ClientHydrationProps) {
-  const [hydrated, setHydrated] = useState(false);
-  const [liveStats, setLiveStats] = useState<{ history: Record<string, number> } | null>(null);
-  const hasHydrated = useRef(false);
-
-  useEffect(() => {
-    if (hasHydrated.current) return;
-    hasHydrated.current = true;
-    setHydrated(true);
-    if (source === 'Estate Vault (ISR)') {
-      fetch('/v1/ops/summary', { cache: 'no-store' })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => data && setLiveStats(data))
-        .catch(() => {});
-    }
-  }, [source]);
-
-  if (!hydrated) return null;
-
-  return (
-    <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-      <p className="text-sm text-blue-700">
-        Client hydrated: {liveStats ? 'Live data active' : 'Static ISR data'}
-      </p>
-    </div>
   );
 }

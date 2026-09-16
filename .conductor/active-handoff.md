@@ -87,3 +87,9 @@ python3 scripts/verify_vault_sync.py
 # 4. Check git tree status
 git status
 ```
+
+> **Code note (2026-09-16, supersedes command semantics):** `verify_vault_sync.py`
+> is now **read-only by default**. It no longer writes the connectivity checkpoint
+> into the canonical vault state path. A write/read-back probe is available via
+> `--probe-write` and is restricted to `universal-mail/diagnostics/*` (refused in CI).
+> The CI `vault-probe` job referencing `VAULT_PAT` was removed.

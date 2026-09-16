@@ -6,6 +6,8 @@ type LabelerStats = {
   total_processed?: number;
   last_run?: string;
   provider?: string;
+  pending_drafts?: number;
+  pending_draft_threads?: string[];
 };
 
 const VAULT_REPO = process.env.VAULT_REPO || '4444J99/estate-vault';
@@ -80,6 +82,11 @@ export default async function Dashboard() {
             {stats.last_run && (
               <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
                 Last sync: {lastSync}
+              </span>
+            )}
+            {stats.pending_drafts !== undefined && Number(stats.pending_drafts) > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">
+                {Number(stats.pending_drafts)} pending draft thread(s) — drafted but not sent
               </span>
             )}
           </p>

@@ -135,6 +135,7 @@ def _provider_args(**overrides) -> argparse.Namespace:
         "password": None,
         "account": None,
         "gmail_extensions": False,
+        "sweep_drafts": False,
     }
     data.update(overrides)
     return argparse.Namespace(**data)
@@ -543,6 +544,57 @@ def test_cmd_triage_limits_to_top_and_reassigns_rank(monkeypatch, capsys, tmp_pa
     assert calls["triage"] == (["a", "b"], "voice", True)
     assert calls["render"] == ([1], "markdown")
     assert calls["voice"][2] == "Anthony"
+
+
+def test_cmd_triage_sweep_drafts_marks_outbox_drafts(monkeypatch, capsys, tmp_path):
+    inbox_msg = EmailMessage(id="a", sender="sender@example.test",
+                             subject="Review needed")
+
+    class _SweepProvider(_FakeProvider):
+        def list_messages(self, query="", limit=100, page_token=None):
+            self.list_calls.append((query, limit, page_token))
+            msgs = {"a": inbox_msg, "d1": EmailMessage(
+                id="d1", sender="sender@example.test",
+                subject="Re: Review needed")}
+            if query == "in:draft":
+                chosen = [msgs["d1"]]
+            else:
+                chosen = [msgs["a"]]
+            return ListMessagesResult(
+                messages=chosen, next_page_token=None, total_estimate=1,
+            )
+
+    provider = _SweepProvider([inbox_msg])
+    monkeypatch.setattr(cli, "get_provider", lambda *args, **kwargs: provider)
+
+    import core.triage as triage_module
+
+    calls = {}
+
+    def fake_triage_messages(messages, voice=None, draft=False):
+        calls["triage"] = ([m.id for m in messages], voice, draft)
+        item = triage_module.TriageItem(
+            message=messages[0], label="Awaiting Reply", tier=2,
+            base_tier=2, is_vip=False, age_hours=1, priority_score=40.0,
+            dossier=triage_module.ResearchDossier(requires_reply=True),
+        )
+        return [item]
+
+    def fake_render_triage(render_items, fmt):
+        calls["render"] = render_items
+        return "rendered triage"
+
+    monkeypatch.setattr(triage_module, "triage_messages", fake_triage_messages)
+    monkeypatch.setattr(triage_module, "render_triage", fake_render_triage)
+
+    args = _provider_args(provider="gmail", query="triage", limit=10, top=0,
+                          format="text", draft=False, voice_file=None,
+                          samples_file=None, name=None, sweep_drafts=True)
+    rc = cli.cmd_triage(args)
+
+    assert rc == 0
+    assert calls["render"][0].pending_draft is True
+    assert "in:draft" in [q for q, _, _ in provider.list_calls]
 
 
 def test_main_dispatches_verbose_subcommand(monkeypatch):

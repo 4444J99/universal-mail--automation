@@ -72,9 +72,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/organvm-iii-ergon/universal-mail--automation"
-Repository = "https://github.com/organvm-iii-ergon/universal-mail--automation"
-Changelog = "https://github.com/organvm-iii-ergon/universal-mail--automation/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/organvm/universal-mail--automation"
+Repository = "https://github.com/organvm/universal-mail--automation"
+Changelog = "https://github.com/organvm/universal-mail--automation/blob/main/CHANGELOG.md"
 "Live Demo" = "https://uma.4444j99.dev"
 
 [project.scripts]
@@ -85,6 +85,25 @@ mail-send = "mail_send:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.mypy]
+files = [
+    "core/triage.py",
+    "core/models.py",
+    "core/research.py",
+    "core/rules.py",
+    "core/voice.py",
+    "core/patchbay.py",
+    "core/state.py",
+    "core/vault_sync.py",
+    "core/flag_policy.py",
+    "core/send_policy.py",
+]
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+show_error_codes = true
 
 [tool.setuptools.packages.find]
 include = ["api*", "acp*", "audit*", "auth*", "config*", "core*", "mcp_server*", "platform*", "providers*"]

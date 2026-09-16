@@ -350,6 +350,7 @@ class CommAction:
     message_id: str
     channel_id: str = "email"
     sender: str = ""
+    priority_tier: Optional[int] = None
     archive: bool = False
     star: bool = False
     mark_read: bool = False

@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 from core.models import CommAction, CommMessage
 
@@ -35,9 +36,11 @@ class PatchCable:
     name: str
     sink_type: SinkType
     destination: str  # URL for webhook, log tag for local_log
-    min_tier: Optional[int] = None  # e.g., 1 (Critical only)
+    min_tier: Optional[int] = None  # tier 1..min_tier route (1 = Critical only)
+    max_tier: Optional[int] = None  # band floor: tier >= max_tier routes (skip True Critical over this sink)
     channels: List[str] = field(default_factory=list)  # e.g. ["twilio", "slack"]
     labels: List[str] = field(default_factory=list)  # e.g. ["Finance/Banking"]
+    timeout_s: float = 5.0
     callback: Optional[Callable[[CommAction, CommMessage], None]] = None
 
     def matches(self, action: CommAction, message: Optional[CommMessage] = None) -> bool:
@@ -46,11 +49,14 @@ class PatchCable:
         if self.channels and channel not in self.channels:
             return False
 
-        tier = getattr(action, "priority_tier", None)
+        tier = action.priority_tier
         if tier is None and message:
             tier = message.priority_tier
         if self.min_tier is not None:
             if tier is None or tier > self.min_tier:
+                return False
+        if self.max_tier is not None:
+            if tier is None or tier < self.max_tier:
                 return False
 
         labels = getattr(action, "add_labels", [])
@@ -63,9 +69,10 @@ class PatchCable:
 class PatchBay:
     """The central patchbay matrix managing active patch cables."""
 
-    def __init__(self) -> None:
+    def __init__(self, urlopen_fn: Optional[Callable[..., Any]] = None) -> None:
         self._cables: List[PatchCable] = []
         self._execution_history: List[Dict[str, Any]] = []
+        self._urlopen = urlopen_fn if urlopen_fn is not None else urlopen
 
     def connect(self, cable: PatchCable) -> None:
         """Plug in a new patch cable."""
@@ -130,7 +137,6 @@ class PatchBay:
                         logger.info("[PATCHBAY:%s] Action %s: %s", cable.destination, action.message_id, action)
                         record["status"] = "logged"
                 elif cable.sink_type == SinkType.WEBHOOK:
-                    # In test/mock mode or real request
                     payload = json.dumps({
                         "message_id": action.message_id,
                         "channel_id": action.channel_id,
@@ -139,8 +145,15 @@ class PatchBay:
                         "labels": getattr(action, "add_labels", []),
                         "destination": cable.destination,
                     }).encode("utf-8")
-                    req = Request(cable.destination, data=payload, headers={"Content-Type": "application/json"})
-                    record["status"] = "queued"
+                    req = Request(cable.destination, data=payload,
+                                  headers={"Content-Type": "application/json"},
+                                  method="POST")
+                    response = self._urlopen(req, timeout=cable.timeout_s)
+                    try:
+                        response.read()
+                    finally:
+                        response.close()
+                    record["status"] = "delivered_to_webhook"
             except Exception as e:
                 logger.error("Failed dispatching across cable %s: %s", cable.name, e)
                 record["status"] = "error"

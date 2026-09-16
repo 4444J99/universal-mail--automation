@@ -85,7 +85,7 @@ Pricing is tailored to seat count and integration needs.
 | **Preview before installing** | Open the live demo at <https://uma.4444j99.dev>. |
 | **Upgrade to Pro** | Email **padavano.anthony@gmail.com** with subject `UMA Pro` to start a $9/mo subscription. |
 | **Talk Enterprise** | Email **padavano.anthony@gmail.com** with subject `UMA Enterprise`, including your team size and the providers you need to connect, for a custom quote. |
-| **General questions** | Open an issue on [GitHub](https://github.com/organvm-iii-ergon/universal-mail--automation/issues) or reach the author [@4444j99](https://github.com/4444j99). |
+| **General questions** | Open an issue on [GitHub](https://github.com/organvm/universal-mail--automation/issues) or reach the author [@4444j99](https://github.com/4444j99). |
 
 > **Note:** Universal Mail Automation runs against your own provider credentials.
 > Free is fully self-hostable today. Pro and Enterprise add the multi-provider

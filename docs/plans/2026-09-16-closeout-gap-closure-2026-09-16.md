@@ -4,8 +4,8 @@
 
 - Working directory: `/Users/4jp/Workspace/4444J99/universal-mail--automation`
 - Baseline: `main` @ `ff6ec5e`; all 4 standing lanes `lane/verify|heal|expand-providers|evolve` at `ff6ec5e` (local == remote).
-- Scope (operator-set, explicit): UMA-only gap closure. Billing/SKU diagnosis, repo transfers, `VAULT_PAT` provisioning, and vault-canary architecture are **out of scope** — the organvm billing lock is one owner-level item recorded here as an external dependency. Resolution: operator directed completion despite the lock; all code merged (merge record below).
-- Standing: **all PRs held** until the organvm billing lock clears (external, org-level owner).
+- Scope (operator-set, explicit): UMA-only gap closure. Billing/SKU diagnosis, `VAULT_PAT` provisioning, and vault-canary architecture were **out of scope**; the organvm billing lock was recorded as one owner-level external item. Resolution (operator-directed, same session): the repo was **transferred out of the locked org** to `4444J99/universal-mail--automation`, which restored Actions runners; all code merged and CI is green.
+- Standing: all PRs merged; repo now lives under the personal account `4444J99` (see Session Addendum).
 
 ## Context & What Was Done
 
@@ -39,7 +39,9 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 - `osacompile` — 4/4 root apple scripts compile (2c).
 - Full-suite aggregates across phases once merged: 1768 + 27 (2b already in 1768) aligned; cross-lane merge expected ~1868+; not re-run per-tree after merge since merging is CI-gated by the billing lock.
 
-## What Is NOT Done (open items)
+## What Was NOT Done At First Draft (SUPERSEDED — see Session Addendum below)
+
+> Historical: recorded mid-session while CI was locked. The transfer + mcp fix resolved the merge/CI blocker; the current open-items list is further below.
 
 - **Merging / CI / Deploy (true blocker, org-level external)**: all four held PRs (#213–#217) cannot merge; **no CI can start** while `organvm` is email-locked ("account is locked due to a billing issue"). One owner-level item: the lock must be cleared by the org owner; UMA records it, is not the owner.
 - **Mypy full-tree (IRF-III-060 remainder)**: gate covers 10 clean modules; 66 errors in 21 files remain outside the pinned surface (primary: `providers/imap.py` 18, `core/obligation_*` 12).
@@ -55,14 +57,14 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 
 ## Decision Record
 
-- Org identity verdict `organvm`: live remote + registry + user decision; `seed.yaml`/pyproject were stale (IRF-III-064 root-fix, bases not outputs).
+- Org identity verdict revised: 2h re-pointed to `organvm` (IRF-III-064), but the repo was subsequently **transferred to `4444J99`** to escape the org billing lock. Identity surfaces are therefore **inconsistent** (`organvm-iii-ergon` legacy README badges, `organvm` in `seed.yaml`/pyproject URLs, `4444J99` actual home) — open item below.
 - Patchbay webhook: dispatch-with-timeout over silence; unit-injectable `urlopen_fn` keeps tests offline (never hits real network).
 - Drafts-graveyard autosend boundary: legal/gov threads surfaced, `suggested_draft` cleared, never auto-sent — mirrored by `send_drafts.py` fail-closed `safe_intent` gate.
 - Scope discipline held: billing diagnosis, transfers, PAT provisioning, canary architecture all declined as out-of-scope (owner-level).
 
 ## Verdict
 
-**STREAM A CODE COMPLETE AND MERGED (2026-09-16 23:55, operator-directed).** All four held PRs merged, then lanes FF'd to a single head. Remaining: runner-based CI/Deploy cannot start because the account is still locked at GitHub (live-verified 0-steps/2s failure on fresh runs at 23:54); that is org-account-level and external to the repo.
+**LANE-LOCAL CLOSE ACHIEVED.** All Stream A work merged, plus a real regression fixed, plus the repo moved so CI runs again. Final head `276edfa`; CI **green** (Python 3.10/3.11/3.12/3.14, Web lint+build, Worker tests, package build); Deploy workflow **success** (container built, smoke-tested, published to GHCR); all 5 refs (`main` + 4 lanes) at 1:1. NOT organization-true for the **organvm org as a whole** — the org-level billing lock persists for other repos (outside this lane). Identity/URL surfaces remain inconsistent (open item).
 
 ## Merge Record (addendum, ==session)
 
@@ -79,12 +81,24 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 - Registry: **IRF-III-067** PR organvm-corpvs-testamentvm **#555** merged; IRF-III-060/061/062/063/064 all code-merged
 - Full combined suite on merged head: `pytest` **1809 passed, 4 skipped**; merged work-branches deleted (remote+local)
 
-## What Is NOT Done (open items, updated)
+### Session Addendum — transfer + CI restoration (same session, post-merge)
 
-- **Runner CI/Deploy still blocked by the GitHub account lock** (org-level, live-verified 23:54Z: runner jobs don't start, 0 steps; only GitHub-internal pages/depgraph jobs run). Owner-level action; re-run CI on `7bc5764` once cleared.
-- Full-tree mypy remediation (66 errors outside the 10-file gate).
+- **Repo transferred** `organvm/universal-mail--automation` → **`4444J99/universal-mail--automation`** (operator-directed) via `POST /repos/.../transfer`. Refs, PRs, issues, and history preserved; local remote re-pointed. This is what actually restored Actions runners — the org lock is sidestepped, not cleared.
+- **CI live-verified green** on `276edfa`: run `35165193218` — 7/7 jobs success; `Deploy` (deploy.yml) success; branch protection satisfied by real checks (no admin bypass on the final fix merge).
+- **Regression fixed** — `fix(ci): pin mcp <2` (**#223**, `276edfa`): dependabot **#197** (2026-09-10) widened `mcp` from `<2` to `<3`, admitting mcp 2.x where `FastMCP`→`MCPServer` was renamed, breaking `tests/test_mcp.py` collection. The billing lock froze CI the same day, hiding it. Reverted the bound in `requirements-mcp.txt` + both pyproject extras and added a dependabot `ignore: mcp >=2.0.0`. (The lock had been masking all CI signal since 2026-09-10.)
+- **Parity**: `main` + `lane/verify|heal|expand-providers|evolve` all at `276edfa`, local:remote 1:1.
+
+## What Is NOT Done (open items, current)
+
+- **Identity / URL surfaces inconsistent** (real, tracked): README still carries **9× `organvm-iii-ergon`** badge/clone/link refs; `server.json` name is `io.github.a-organvm/...`; `pyproject.toml` author email `anthony@organvm.org`; `seed.yaml` `org: organvm`. Repo's actual home is now `4444J99`. 2h's `organvm` re-point is now partly stale again post-transfer.
+- **Full-tree mypy** — gate covers 10 clean core modules; 66 errors in 21 files remain outside the pinned surface (primary `providers/imap.py`, `core/obligation_*`).
+- **Apple Mail parity** — `providers/mailapp.py` code-level verification beyond the compile gate not done.
+- **Registry / DONE propagation** — no DONE-ID claimed this session; registry surface still lists the repo under `organvm` and IRF-III-067 records the billing lock the transfer routed around (IRF-III-067 itself was merged as corpvs #555). Registry local checkout is also 18 behind + dirty (broader workspace WIP, not this lane).
+- **Org-wide lock persists** — other `organvm` repos still cannot start Actions; only this repo was moved out.
 
 ## Remaining Follow-ups
 
-- [ ] Org owner: clear the account lock → rerun CI on `7bc5764` to confirm Python 3.11/3.12 gates pass remotely.
-- [ ] Optional later: full-tree mypy remediation (`providers/imap.py` + `core/obligation_*`), Apple Mail provider code-level parity.
+- [ ] Decide canonical identity post-transfer (`4444J99` vs `organvm`) and repoint README (9 refs), `server.json`, `pyproject` author email, `seed.yaml` accordingly.
+- [ ] Update registry (organvm-corpvs-testamentvm): note the transfer; adjust IRF-III-067 framing; claim + record DONE-IDs for this session's merged work.
+- [ ] Optional later: full-tree mypy remediation; Apple Mail provider code-level parity.
+- [ ] Org-owner: resolve the `organvm` account lock for the remaining repos (UMA no longer depends on it).

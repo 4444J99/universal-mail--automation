@@ -5,12 +5,12 @@
 # Universal Communications Synth
 ### (Universal Mail Automation)
 
-[![CI](https://github.com/organvm-iii-ergon/universal-mail--automation/actions/workflows/ci.yml/badge.svg)](https://github.com/organvm-iii-ergon/universal-mail--automation/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey)](https://github.com/organvm-iii-ergon/universal-mail--automation)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/organvm-iii-ergon/universal-mail--automation/blob/main/LICENSE)
+[![CI](https://github.com/4444J99/universal-mail--automation/actions/workflows/ci.yml/badge.svg)](https://github.com/4444J99/universal-mail--automation/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey)](https://github.com/4444J99/universal-mail--automation)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/4444J99/universal-mail--automation/blob/main/LICENSE)
 [![Organ III](https://img.shields.io/badge/Organ-III%20Ergon-F59E0B)](https://github.com/organvm-iii-ergon)
-[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/organvm-iii-ergon/universal-mail--automation)
-[![Python](https://img.shields.io/badge/lang-Python-informational)](https://github.com/organvm-iii-ergon/universal-mail--automation)
+[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/4444J99/universal-mail--automation)
+[![Python](https://img.shields.io/badge/lang-Python-informational)](https://github.com/4444J99/universal-mail--automation)
 
 
 **A modular communications triage and routing synth across Mail (Gmail, Outlook, iCloud), SMS (Twilio), and Event Webhooks — powered by multi-channel identity resolution, Eisenhower priority tiers, declarative patchbay routing, and provable safety gates.**
@@ -342,7 +342,7 @@ This machine's home-level agent policy forbids LaunchAgents. The safe default is
 the on-demand intake runner:
 
 ```bash
-cd ~/Code/organvm/universal-mail--automation
+cd ~/Workspace/4444J99/universal-mail--automation
 scripts/intake_now.sh
 ```
 
@@ -366,7 +366,7 @@ The most useful output files are:
 The `deploy.sh` script handles the complete setup:
 
 ```bash
-git clone https://github.com/organvm-iii-ergon/universal-mail--automation.git
+git clone https://github.com/4444J99/universal-mail--automation.git
 cd universal-mail--automation
 ./deploy.sh
 ```

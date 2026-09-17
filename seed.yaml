@@ -1,11 +1,11 @@
-# seed.yaml — Automation Contract for organvm/universal-mail--automation
+# seed.yaml — Automation Contract for 4444J99/universal-mail--automation
 # Schema: seed/v1.0
 
 schema_version: '1.0'
 organ: III
 organ_name: Commerce
 repo: universal-mail--automation
-org: organvm
+org: 4444J99
 metadata:
   implementation_status: ACTIVE
   tier: standard

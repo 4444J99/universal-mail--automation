@@ -57,7 +57,7 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 
 ## Decision Record
 
-- Org identity verdict revised: 2h re-pointed to `organvm` (IRF-III-064), but the repo was subsequently **transferred to `4444J99`** to escape the org billing lock. Identity surfaces are therefore **inconsistent** (`organvm-iii-ergon` legacy README badges, `organvm` in `seed.yaml`/pyproject URLs, `4444J99` actual home) — open item below.
+- Org identity: 2h re-pointed to `organvm` (IRF-III-064); the repo was then **transferred to `4444J99`** to escape the org billing lock. Operator ruled: **`4444J99` is now canonical.** All self-referential surfaces repointed (README badges/clone/path, `INSTALL.md`, `docs/PRICING.md`, `docs/pitch/index.html`, `CHANGELOG.md` compare links, `server.json` → `io.github.4444j99/...`, `pyproject` URLs + author email, `seed.yaml` `org: 4444J99`, launchd plists). Org/sibling refs (`github.com/organvm`, `organvm-iii-ergon/tab-bookmark-manager`, `organvm-iv-taxis/*`, `organvm-i-theoria/*`) intentionally preserved — those are real, separate repos/orgs.
 - Patchbay webhook: dispatch-with-timeout over silence; unit-injectable `urlopen_fn` keeps tests offline (never hits real network).
 - Drafts-graveyard autosend boundary: legal/gov threads surfaced, `suggested_draft` cleared, never auto-sent — mirrored by `send_drafts.py` fail-closed `safe_intent` gate.
 - Scope discipline held: billing diagnosis, transfers, PAT provisioning, canary architecture all declined as out-of-scope (owner-level).
@@ -90,15 +90,15 @@ Production-writing CI probe removed; `scripts/verify_vault_sync.py` made read-on
 
 ## What Is NOT Done (open items, current)
 
-- **Identity / URL surfaces inconsistent** (real, tracked): README still carries **9× `organvm-iii-ergon`** badge/clone/link refs; `server.json` name is `io.github.a-organvm/...`; `pyproject.toml` author email `anthony@organvm.org`; `seed.yaml` `org: organvm`. Repo's actual home is now `4444J99`. 2h's `organvm` re-point is now partly stale again post-transfer.
+- ~~Identity / URL surfaces inconsistent~~ **RESOLVED** — all self-referential surfaces repointed to `4444J99` (see Decision Record). Dated historical records (`docs/plans/*`, `docs/reviews/*`, `audit/*`) left as-is by design.
 - **Full-tree mypy** — gate covers 10 clean core modules; 66 errors in 21 files remain outside the pinned surface (primary `providers/imap.py`, `core/obligation_*`).
 - **Apple Mail parity** — `providers/mailapp.py` code-level verification beyond the compile gate not done.
-- **Registry / DONE propagation** — no DONE-ID claimed this session; registry surface still lists the repo under `organvm` and IRF-III-067 records the billing lock the transfer routed around (IRF-III-067 itself was merged as corpvs #555). Registry local checkout is also 18 behind + dirty (broader workspace WIP, not this lane).
+- **Registry / DONE propagation** — no DONE-ID claimed this session; registry surface still lists the repo under `organvm`. Next action: PR `organvm-corpvs-testamentvm` to note the transfer, adjust IRF-III-067 framing, and record DONE-IDs (approved this session).
 - **Org-wide lock persists** — other `organvm` repos still cannot start Actions; only this repo was moved out.
 
 ## Remaining Follow-ups
 
-- [ ] Decide canonical identity post-transfer (`4444J99` vs `organvm`) and repoint README (9 refs), `server.json`, `pyproject` author email, `seed.yaml` accordingly.
+- [x] Repoint identity surfaces to `4444J99` (README, `INSTALL.md`, `docs/PRICING.md`, `docs/pitch/index.html`, `CHANGELOG.md`, `server.json`, `pyproject`, `seed.yaml`, plists).
 - [ ] Update registry (organvm-corpvs-testamentvm): note the transfer; adjust IRF-III-067 framing; claim + record DONE-IDs for this session's merged work.
 - [ ] Optional later: full-tree mypy remediation; Apple Mail provider code-level parity.
 - [ ] Org-owner: resolve the `organvm` account lock for the remaining repos (UMA no longer depends on it).

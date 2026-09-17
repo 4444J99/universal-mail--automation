@@ -49,7 +49,7 @@ pip install "universal-mail-automation[outlook,yaml]"
 ## 2. Install from source
 
 ```bash
-git clone https://github.com/organvm/universal-mail--automation.git
+git clone https://github.com/4444J99/universal-mail--automation.git
 cd universal-mail--automation
 
 python3 -m venv .venv && source .venv/bin/activate

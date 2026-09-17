@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.a-organvm/universal-mail-automation",
+  "name": "io.github.4444j99/universal-mail-automation",
   "description": "Email triage an agent can't misuse: it can't archive a protected sender, and every action returns a verifiable receipt.",
   "version": "0.2.0",
   "packages": [

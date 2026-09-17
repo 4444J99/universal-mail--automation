@@ -25,5 +25,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core project structure and documentation
 - README with portfolio-quality documentation
 
-[Unreleased]: https://github.com/organvm/universal-mail--automation/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/organvm/universal-mail--automation/releases/tag/v0.1.0
+[Unreleased]: https://github.com/4444J99/universal-mail--automation/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/4444J99/universal-mail--automation/releases/tag/v0.1.0

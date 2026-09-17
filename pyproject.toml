@@ -9,7 +9,7 @@ description = "Multi-provider inbox triage across Gmail, Outlook, iCloud, and ma
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Anthony", email = "anthony@organvm.org" }]
+authors = [{ name = "Anthony", email = "padavano.anthony@gmail.com" }]
 keywords = ["email", "gmail", "outlook", "imap", "automation", "triage", "inbox", "labeling"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -72,9 +72,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/organvm/universal-mail--automation"
-Repository = "https://github.com/organvm/universal-mail--automation"
-Changelog = "https://github.com/organvm/universal-mail--automation/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/4444J99/universal-mail--automation"
+Repository = "https://github.com/4444J99/universal-mail--automation"
+Changelog = "https://github.com/4444J99/universal-mail--automation/blob/main/CHANGELOG.md"
 "Live Demo" = "https://uma.4444j99.dev"
 
 [project.scripts]

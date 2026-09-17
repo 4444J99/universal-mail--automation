@@ -9,6 +9,12 @@ updates:
     groups:
       pip-deps:
         patterns: ["*"]
+    ignore:
+      # mcp 2.x renamed FastMCP -> MCPServer; mcp_server/server.py targets the
+      # 1.x API. Bound kept at <2 until the server is migrated + validated
+      # (see requirements-mcp.txt). dependabot #197 widened it and broke CI.
+      - dependency-name: "mcp"
+        versions: [">=2.0.0"]
   - package-ecosystem: "github-actions"
     directories:
       - "/"

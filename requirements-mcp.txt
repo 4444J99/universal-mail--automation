@@ -3,4 +3,10 @@
 # stays importable on 3.9+. Install only where you run the MCP server (the deploy
 # image is Python 3.11, so the hosted /mcp endpoint gets this):
 #   pip install -r requirements.txt -r requirements-api.txt -r requirements-mcp.txt
-mcp>=1.27.2,<3
+#
+# Pinned <2: mcp 2.x renamed FastMCP -> MCPServer and moved
+# TransportSecuritySettings, so mcp_server/server.py does not import against
+# 2.x. The upper bound was widened to <3 by dependabot #197 (2026-09-10), which
+# silently broke CI test collection; do not lift this bound until the server is
+# migrated and validated against 2.x.
+mcp>=1.27.2,<2

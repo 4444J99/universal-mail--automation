@@ -17,7 +17,7 @@ concurrency:
 jobs:
   python:
     name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -69,7 +69,7 @@ jobs:
 
   python-package:
     name: Python package build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -101,7 +101,7 @@ jobs:
 
   web:
     name: Web lint and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -136,7 +136,7 @@ jobs:
 
   cloudflare-worker:
     name: Cloudflare Worker tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
 
     steps:
@@ -159,7 +159,7 @@ jobs:
   # reason every lane-branch run in the historical log "skips" the deploy job.
   cloudflare-share-deploy:
     name: Deploy Cloudflare share demo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     needs: [python, python-package, web, cloudflare-worker]
     if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}

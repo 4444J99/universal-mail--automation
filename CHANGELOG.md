@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Platinum Sprint: CI/CD workflow, standardized badge row, ADR documentation
 - Initial CHANGELOG following Keep a Changelog format
 
+### Changed
+
+- CI: pin GitHub Actions runner images to `ubuntu-24.04` (from floating `ubuntu-latest`) ahead of the scheduled migration to Ubuntu 26 on 2026-10-19.
+
 ## [0.1.0] - 2026-02-11
 
 ### Added

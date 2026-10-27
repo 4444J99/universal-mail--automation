@@ -1,10 +1,15 @@
 """Cloudflare-only incident cohorts stay source-bound, private and additive."""
+import argparse
+import contextlib
 import hashlib
+import io
+import os
 import json
 import sqlite3
 import stat
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from core.historical_intelligence import build_historical_intelligence
@@ -115,6 +120,195 @@ class CloudflareIndexTests(unittest.TestCase):
                                     (2, 2, 1, 1792314001, 2, 0, 'spoof-body'),
                                     (3, 3, 2, 1792400400, 3, 1, 'private-body')])
         return path
+
+    def export_cli(self, source, output):
+        from cli import cmd_mail_history_export
+
+        args = argparse.Namespace(source=str(source), output=str(output),
+            source_type='apple_mail_cloudflare_index', since=None, until=None,
+            limit=None, body_char_limit=0, self_address=[], mailbox_hint=None,
+            pretty_export=False, sort_keys=False, pretty=False)
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            result = cmd_mail_history_export(args)
+        return result, stdout.getvalue(), stderr.getvalue()
+
+    def test_date_bounds_preserve_undated_notices_and_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.index(directory)
+            with sqlite3.connect(path) as connection:
+                connection.execute('INSERT INTO messages VALUES (4,1,1,NULL,4,0,?)', ('private-undated-body',))
+            for bounds in ({'since': '2026-10-19'}, {'until_exclusive': '2026-10-19'},
+                           {'since': '2026-10-19', 'until_exclusive': '2026-10-20'}):
+                with self.subTest(bounds=bounds):
+                    data = build_mail_history_export(path, source_type='apple_mail_cloudflare_index', **bounds)
+                    coverage = data['source']['coverage']
+                    self.assertEqual(coverage['matching_rows'], 2)
+                    self.assertEqual(coverage['returned_rows'], 2)
+                    self.assertEqual(coverage['unknown_received_dates'], 1)
+                    self.assertTrue(coverage['complete_for_local_query'])
+                    self.assertEqual(sum(row['received_at'] is None for row in data['messages']), 1)
+                    limited = build_mail_history_export(path, source_type='apple_mail_cloudflare_index', limit=1, **bounds)
+                    self.assertFalse(limited['source']['coverage']['complete_for_local_query'])
+                    self.assertEqual(limited['source']['coverage']['matching_rows'], 2)
+                    self.assertEqual(limited['source']['coverage']['unknown_received_dates'], 1)
+
+    def test_cli_rejects_source_output_aliases_without_modifying_index(self):
+        for alias in ('same_path', 'symlink', 'hardlink'):
+            with self.subTest(alias=alias), tempfile.TemporaryDirectory() as directory:
+                source = self.index(directory)
+                output = source if alias == 'same_path' else Path(directory) / 'export.json'
+                if alias == 'symlink':
+                    output.symlink_to(source)
+                elif alias == 'hardlink':
+                    output.hardlink_to(source)
+                before = source.read_bytes()
+                mode_before = stat.S_IMODE(source.stat().st_mode)
+                result, stdout, stderr = self.export_cli(source, output)
+                self.assertEqual(result, 1)
+                self.assertIn('output must not identify the mail history source', stderr)
+                self.assertEqual(stdout, '')
+                self.assertNotIn(str(source), stderr)
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), mode_before)
+
+    def test_writer_rejects_alias_introduced_during_export_build(self):
+        for alias in ('symlink', 'hardlink', 'replaced_source', 'original_source'):
+            with self.subTest(alias=alias), tempfile.TemporaryDirectory() as directory:
+                source = self.index(directory)
+                output = Path(directory) / 'export.json'
+                original = Path(directory) / 'original-index'
+                before = source.read_bytes()
+                mode_before = stat.S_IMODE(source.stat().st_mode)
+
+                def build_then_alias(*args, **kwargs):
+                    export = build_mail_history_export(*args, **kwargs)
+                    target = source
+                    if alias in ('replaced_source', 'original_source'):
+                        source.rename(original)
+                        self.index(directory)
+                        if alias == 'original_source':
+                            target = original
+                    if alias == 'symlink':
+                        output.symlink_to(target)
+                    else:
+                        output.hardlink_to(target)
+                    return export
+
+                with mock.patch('core.mail_history_export.build_mail_history_export', side_effect=build_then_alias):
+                    result, stdout, stderr = self.export_cli(source, output)
+                self.assertEqual(result, 1)
+                self.assertIn('output must not identify the mail history source', stderr)
+                self.assertEqual(stdout, '')
+                self.assertNotIn(str(source), stderr)
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), mode_before)
+                if original.exists():
+                    self.assertEqual(original.read_bytes(), before)
+                    self.assertEqual(stat.S_IMODE(original.stat().st_mode), mode_before)
+
+    def test_writer_rejects_replaced_destination_without_success_receipt(self):
+        for phase in ('open', 'truncate'):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                source = self.index(directory)
+                output = Path(directory) / 'export.json'
+                before = source.read_bytes()
+                mode_before = stat.S_IMODE(source.stat().st_mode)
+                real_operation = os.open if phase == 'open' else os.ftruncate
+
+                def replace_destination(*args, **kwargs):
+                    result = real_operation(*args, **kwargs)
+                    output.unlink()
+                    output.symlink_to(source)
+                    return result
+
+                with mock.patch('core.mail_history_export.os.' + ('open' if phase == 'open' else 'ftruncate'),
+                                side_effect=replace_destination):
+                    result, stdout, stderr = self.export_cli(source, output)
+                self.assertEqual(result, 1)
+                self.assertIn('mail history export destination changed during writing', stderr)
+                self.assertEqual(stdout, '')
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), mode_before)
+
+    def test_index_writer_requires_complete_source_binding_before_open(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.index(directory)
+            source_stat = source.stat()
+            identity = (source_stat.st_dev, source_stat.st_ino)
+            export = build_mail_history_export(source, source_type='apple_mail_cloudflare_index')
+            before = source.read_bytes()
+            mode_before = stat.S_IMODE(source.stat().st_mode)
+            for binding in ({}, {'source_path': source}, {'source_identity': identity}):
+                with self.subTest(binding=tuple(binding)):
+                    with self.assertRaisesRegex(MailHistoryExportError, 'require source_path and source_identity'):
+                        write_mail_history_export(export, source, **binding)
+                    destination = Path(directory) / 'absent-parent' / 'history.json'
+                    with self.assertRaisesRegex(MailHistoryExportError, 'require source_path and source_identity'):
+                        write_mail_history_export(export, destination, **binding)
+                    self.assertFalse(destination.parent.exists())
+                    self.assertEqual(source.read_bytes(), before)
+                    self.assertEqual(stat.S_IMODE(source.stat().st_mode), mode_before)
+            output = Path(directory) / 'history.json'
+            receipt = write_mail_history_export(export, output, source_path=source, source_identity=identity)
+            self.assertEqual(json.loads(output.read_text()), export)
+            self.assertEqual(receipt['output']['message_count'], 2)
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+            self.assertNotIn('source_identity', json.dumps(receipt))
+            self.assertEqual(source.read_bytes(), before)
+
+    def test_index_writer_protects_sqlite_companions_and_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.index(directory)
+            writer = sqlite3.connect(source)
+            try:
+                self.assertEqual(writer.execute('PRAGMA journal_mode=WAL').fetchone()[0], 'wal')
+                writer.execute('PRAGMA wal_autocheckpoint=0')
+                writer.execute('INSERT INTO messages VALUES (4,1,1,1792400401,4,0,?)', ('private-wal-body',))
+                writer.commit()
+                source_alias = Path(directory) / 'source-link'
+                source_alias.symlink_to(source)
+                source_stat = source.stat()
+                identity = (source_stat.st_dev, source_stat.st_ino)
+                export = build_mail_history_export(source_alias, source_type='apple_mail_cloudflare_index')
+                journal = Path(str(source) + '-journal')
+                journal.write_bytes(b'synthetic rollback-journal sentinel')
+                protected = [source] + [Path(str(source) + suffix) for suffix in ('-wal', '-shm', '-journal')]
+                before = {path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in protected}
+                for companion in protected[1:]:
+                    for alias in ('same_path', 'symlink', 'hardlink'):
+                        with self.subTest(companion=companion.suffix, alias=alias):
+                            output = companion if alias == 'same_path' else Path(directory) / 'export.json'
+                            if alias == 'symlink':
+                                output.symlink_to(companion)
+                            elif alias == 'hardlink':
+                                output.hardlink_to(companion)
+                            try:
+                                with self.assertRaisesRegex(MailHistoryExportError, 'output must not identify'):
+                                    write_mail_history_export(export, output,
+                                                              source_path=source_alias, source_identity=identity)
+                                for path, snapshot in before.items():
+                                    self.assertEqual((path.read_bytes(), stat.S_IMODE(path.stat().st_mode)), snapshot)
+                            finally:
+                                if alias != 'same_path':
+                                    output.unlink()
+            finally:
+                writer.close()
+
+    def test_index_writer_rejects_absent_companion_names_without_creating_them(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.index(directory)
+            source_stat = source.stat()
+            identity = (source_stat.st_dev, source_stat.st_ino)
+            export = build_mail_history_export(source, source_type='apple_mail_cloudflare_index')
+            for suffix in ('-wal', '-shm', '-journal'):
+                with self.subTest(suffix=suffix):
+                    destination = Path(str(source) + suffix)
+                    self.assertFalse(destination.exists())
+                    with self.assertRaisesRegex(MailHistoryExportError, 'output must not identify'):
+                        write_mail_history_export(export, destination,
+                                                  source_path=source, source_identity=identity)
+                    self.assertFalse(destination.exists())
 
     def test_index_export_is_bounded_metadata_only_and_does_not_change_source(self):
         with tempfile.TemporaryDirectory() as directory:

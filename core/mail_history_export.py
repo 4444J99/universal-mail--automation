@@ -419,9 +419,11 @@ def _cloudflare_index_rows(path: Path, *, limit: Optional[int], since_dt: Option
     where = "(lower(a.address) LIKE ? OR lower(a.address) LIKE ?)"
     values: List[Any] = ["%@cloudflare.com", "%@%.cloudflare.com"]
     if since_dt is not None:
-        where += " AND m.date_received >= ?"; values.append(since_dt.timestamp())
+        where += " AND (m.date_received IS NULL OR m.date_received >= ?)"
+        values.append(since_dt.timestamp())
     if until_dt is not None:
-        where += " AND m.date_received < ?"; values.append(until_dt.timestamp())
+        where += " AND (m.date_received IS NULL OR m.date_received < ?)"
+        values.append(until_dt.timestamp())
     source = " FROM messages m JOIN addresses a ON a.ROWID=m.sender JOIN subjects s ON s.ROWID=m.subject WHERE " + where
     deadline = time.monotonic() + 10
     try:
@@ -659,19 +661,55 @@ def write_mail_history_export(
     *,
     pretty: bool = False,
     sort_keys: bool = False,
+    source_path: Optional[Union[Path, str]] = None,
+    source_identity: Optional[Tuple[int, int]] = None,
 ) -> Dict[str, Any]:
-    """Write a private export and return a stdout-safe receipt."""
+    """Write a private export; index exports require the pre-read source binding."""
     path = Path(output_path).expanduser()
+    source = export.get("source") or {}
+    is_index = isinstance(source, dict) and source.get("type") == "apple_mail_cloudflare_index"
+    if is_index and (source_path is None or source_identity is None):
+        raise MailHistoryExportError("Cloudflare index exports require source_path and source_identity")
+    protected_paths = []
+    if source_path is not None:
+        canonical_source = Path(source_path).expanduser().resolve()
+        protected_paths.append(canonical_source)
+        if is_index:
+            protected_paths.extend(Path(str(canonical_source) + suffix)
+                                   for suffix in ("-wal", "-shm", "-journal"))
+        if path.resolve() in protected_paths:
+            raise MailHistoryExportError("output must not identify the mail history source")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     payload = json.dumps(export, indent=2 if pretty else None, sort_keys=sort_keys)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        opened_stat = os.fstat(stream.fileno())
+        opened_identity = (opened_stat.st_dev, opened_stat.st_ino)
+        protected_identities = {source_identity} if source_identity is not None else set()
+        for protected_path in protected_paths:
+            try:
+                current_source = protected_path.stat()
+            except FileNotFoundError:
+                if protected_path == protected_paths[0]:
+                    raise
+                continue
+            protected_identities.add((current_source.st_dev, current_source.st_ino))
+        if opened_identity in protected_identities:
+            raise MailHistoryExportError("output must not identify the mail history source")
+        destination = path.stat()
+        if (destination.st_dev, destination.st_ino) != opened_identity:
+            raise MailHistoryExportError("mail history export destination changed during writing")
         if hasattr(os, "fchmod"):
             os.fchmod(stream.fileno(), 0o600)
         else:
             os.chmod(path, 0o600)
+        os.ftruncate(stream.fileno(), 0)
         stream.write(payload + "\n")
-    stat = path.stat()
+        stream.flush()
+        stat = os.fstat(stream.fileno())
+        destination = path.stat()
+        if (destination.st_dev, destination.st_ino) != opened_identity:
+            raise MailHistoryExportError("mail history export destination changed during writing")
     return {
         "schema": MAIL_HISTORY_EXPORT_RECEIPT_SCHEMA,
         "status": "ok",

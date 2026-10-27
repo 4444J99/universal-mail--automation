@@ -1315,8 +1315,14 @@ def cmd_mail_history_export(args: argparse.Namespace) -> int:
         or "~/System/Reports/mail-history/latest.json"
     )
     try:
+        source_path = Path(raw_source).expanduser()
+        output_path = Path(raw_output).expanduser()
+        source_stat = source_path.stat()
+        source_identity = (source_stat.st_dev, source_stat.st_ino)
+        if output_path.exists() and source_path.samefile(output_path):
+            raise MailHistoryExportError("output must not identify the mail history source")
         export = build_mail_history_export(
-            Path(raw_source).expanduser(),
+            source_path,
             source_type=args.source_type,
             since=args.since,
             until_exclusive=args.until,
@@ -1327,9 +1333,11 @@ def cmd_mail_history_export(args: argparse.Namespace) -> int:
         )
         receipt = write_mail_history_export(
             export,
-            Path(raw_output).expanduser(),
+            output_path,
             pretty=args.pretty_export,
             sort_keys=args.sort_keys,
+            source_path=source_path,
+            source_identity=source_identity,
         )
     except MailHistoryExportError as e:
         print(f"mail-history-export: {e.detail}", file=sys.stderr)

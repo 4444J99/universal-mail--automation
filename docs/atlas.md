@@ -16,7 +16,7 @@ pull-only) and run by a local daemon's mail heartbeat. Mirrors the `edu-organism
 | **Account** | a configured mailbox; provider + capability flags + receipt path | Member | `core/models.py`, `providers/base.py` |
 | **Message** | a single envelope (sender/subject/tier/snippet/age) | Mandate | `core/models.py`, `providers/{mailapp,imap,gmail,outlook}.py` |
 | **Classifier** | rules taxonomy + Eisenhower tiers + protected-sender gate | Standard | `core/rules.py` (2nd observer: `core/audit.py`) |
-| **Action/Sweep** | the reversible move: flag-fire / archive / skip | Standing | `inbox_sweep.py`, `gmail_imap_sweep.py`, `providers/mailapp.py` |
+| **Action/Sweep** | proposed dispositions (flag-fire / archive / keep), queued as observations for evidence review — no direct mailbox writes | Standing | `inbox_sweep.py`, `gmail_imap_sweep.py`, `providers/mailapp.py` |
 | **Obligation** | derived next-step on a 3-rung PROTOCOL→PRECEDENT→EXPLORATION cascade | Progression | `obligations_build.py`, `core/protocols.py` |
 | **Draft** | voice-matched outbound reply, **never sent** | Mandate (outbound) | `draft_writer.py`, `core/voice.py` |
 | **Connector** | the write-door grant that permits a real mailbox mutation | Governance | `auth/onepassword.py`, `gmail_auth.py`, `providers/imap.py` |
@@ -54,8 +54,7 @@ Permanent homes, in order of privacy:
 
 ## How it runs (the heartbeat)
 
-Executed by the operator's local daemon mail beat: sweep all Apple Mail accounts keyless (flag fires +
-archive folder-stores), rebuild an obligations ledger from the sweep receipts via `obligations_build.py`
+Executed by the operator's local daemon mail beat: sweep all Apple Mail accounts keyless (classify; flag/archive dispositions are queued as observations — no mailbox writes without an approved evidence plan), rebuild an obligations ledger from the sweep receipts via `obligations_build.py`
 → `core/protocols.py`, enrich reply drafts via `draft_writer.py` (never sends), render a local face. The
 label-store archive leg (e.g. Gmail) is opt-in behind an env flag until the Connector is armed.
 Receipts/ledger are gitignored, local, PII-bearing — never committed.

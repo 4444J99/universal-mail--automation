@@ -137,6 +137,31 @@ class CloudflareIndexTests(unittest.TestCase):
             self.assertTrue(data['source']['coverage']['complete_for_local_query'])
             self.assertEqual(len(data['messages']), 1)
 
+    def test_nonpositive_public_limits_are_rejected_before_index_queries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.index(directory)
+            for bound in (0, -1):
+                with self.assertRaisesRegex(MailHistoryExportError, 'limit must be greater than zero'):
+                    build_mail_history_export(path, source_type='apple_mail_cloudflare_index', limit=bound)
+
+    def test_committed_wal_rows_are_visible_without_copying_or_mutating_mail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.index(directory)
+            writer = sqlite3.connect(path)
+            try:
+                self.assertEqual(writer.execute('PRAGMA journal_mode=WAL').fetchone()[0], 'wal')
+                writer.execute('PRAGMA wal_autocheckpoint=0')
+                writer.execute('INSERT INTO messages VALUES (4,1,1,1792400401,4,0,?)', ('private-wal-body',))
+                writer.commit()
+                wal = Path(str(path) + '-wal')
+                before = (path.read_bytes(), wal.read_bytes())
+                data = build_mail_history_export(path, source_type='apple_mail_cloudflare_index')
+                self.assertEqual(len(data['messages']), 3)
+                self.assertEqual((path.read_bytes(), wal.read_bytes()), before)
+                self.assertNotIn('private-wal-body', json.dumps(data))
+            finally:
+                writer.close()
+
     def test_schema_failure_is_sanitized_and_raw_export_is_private(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'private-source-name'; sqlite3.connect(path).close()

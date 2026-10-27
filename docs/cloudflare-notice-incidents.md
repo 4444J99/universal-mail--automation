@@ -22,6 +22,12 @@ an oversized query requires an explicit `--limit`. Date filtering happens before
 the bound. Explicitly limited results carry incomplete coverage through the export
 and intelligence output. Queries have a ten-second progress deadline and two-second
 SQLite lock timeout. Unsupported schemas and failed observations remain errors.
+The snapshot is a SQLite read transaction, not a copied database. WAL sidecars
+must be accessible; inaccessible state fails instead of returning an empty result.
+The adapter does not use immutable mode or copy only the primary file, either of
+which could omit recent WAL data. See SQLite's
+[snapshot isolation](https://sqlite.org/isolation.html) and
+[read-only WAL requirements](https://sqlite.org/wal.html#read_only_databases).
 
 On the managed macOS host, run protected access through the fixed responsible
 identity from the UMA checkout and its configured Python environment:

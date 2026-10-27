@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -130,7 +131,19 @@ def _canonical_lane(kind: str, current_lane: str) -> str:
     }.get(kind, current_lane or "review")
 
 
-def _group_key(finding: Dict[str, Any], detail: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+def _notice_identity(detail: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    notice = detail.get("provider_notice")
+    if not isinstance(notice, dict): return None
+    identity = notice.get("incident_id")
+    if (not isinstance(identity, str) or not re.fullmatch(r"incident_[a-f0-9]{16}", identity)
+            or notice.get("provider") != "cloudflare"
+            or notice.get("category") not in {"usage_quota", "update", "security", "billing", "renewal"}
+            or notice.get("resource") not in {"account", "durable_objects", "d1", "kv", "workers"}):
+        return None
+    return {key: notice[key] for key in ("incident_id", "provider", "category", "resource")}
+
+
+def _group_key(finding: Dict[str, Any], detail: Dict[str, Any]) -> Tuple[str, ...]:
     kind = str(finding.get("kind") or detail.get("kind") or "unknown")
     lane = _canonical_lane(kind, str(finding.get("recommended_lane") or detail.get("recommended_lane") or "review"))
     ops_status = str(finding.get("ops_lane_status") or "unknown")
@@ -139,7 +152,9 @@ def _group_key(finding: Dict[str, Any], detail: Dict[str, Any]) -> Tuple[str, st
     if kind == "missed_lead":
         severity = "opportunity"
         status = str(detail.get("status") or "candidate")
-    return kind, lane, ops_status, status, severity
+    key = kind, lane, ops_status, status, severity
+    notice = _notice_identity(detail)
+    return (*key, notice["incident_id"]) if notice else key
 
 
 def _priority_score(group: Dict[str, Any]) -> int:
@@ -238,13 +253,13 @@ def _sample_hints(existing: List[str], incoming: Iterable[Any], *, limit: int = 
 
 def _build_groups(intelligence: Dict[str, Any]) -> List[Dict[str, Any]]:
     details = _details_by_id(intelligence)
-    grouped: Dict[Tuple[str, str, str, str, str], Dict[str, Any]] = {}
+    grouped: Dict[Tuple[str, ...], Dict[str, Any]] = {}
     for finding in intelligence.get("reconciliation", {}).get("findings") or []:
         if not isinstance(finding, dict):
             continue
         detail = details.get(str(finding.get("id"))) or {}
-        kind, lane, ops_status, status, severity = _group_key(finding, detail)
-        key = kind, lane, ops_status, status, severity
+        key = _group_key(finding, detail)
+        kind, lane, ops_status, status, severity = key[:5]
         approval = _approval_type(kind, status)
         group = grouped.setdefault(
             key,
@@ -269,6 +284,7 @@ def _build_groups(intelligence: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "provider_hints": [],
                 "provider_hint_counts": Counter(),
                 "reason_codes": _reason_codes(kind, severity, ops_status, status),
+                **({"provider_notice": _notice_identity(detail)} if _notice_identity(detail) else {}),
             },
         )
         group["finding_count"] += 1

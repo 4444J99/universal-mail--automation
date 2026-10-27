@@ -7,6 +7,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from email.utils import parseaddr
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -242,6 +243,92 @@ def evidence_id_for_row(row: Dict[str, Any]) -> str:
     return _evidence_id(row)
 
 
+def _cloudflare_notice(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Subject-bound notice identity, not provider authentication or quota proof."""
+    sender = next((row[key] for key in ("address", "from_address", "sender_email", "from", "sender")
+                   if isinstance(row.get(key), str) and row[key].strip()), "")
+    address = parseaddr(sender)[1]
+    domain = address.rsplit("@", 1)[-1].lower() if "@" in address else ""
+    if domain != "cloudflare.com" and not domain.endswith(".cloudflare.com"):
+        return None
+    subject = str(row.get("subject") or "")
+    usage = re.match(r"^\s*\[alert\]\s+(durable objects|workers kv|kv|d1|workers)\s+"
+                     r"(daily|monthly)\s+(?:operation|operations|usage)\s+limit\s+"
+                     r"(exceeded|([0-9]{1,3}(?:\.[0-9]{1,2})?)%\s+reached)\b", subject, re.I)
+    category, resource, level, percent, period = "other", "account", None, None, None
+    if usage:
+        category = "usage_quota"
+        resource = {"durable objects": "durable_objects", "workers kv": "kv", "kv": "kv",
+                    "d1": "d1", "workers": "workers"}[usage.group(1).lower()]
+        period = usage.group(2).lower()
+        level = "exceeded" if usage.group(3).lower() == "exceeded" else "threshold"
+        percent = float(usage.group(4)) if usage.group(4) else None
+    elif re.search(r"\b(security|compromis\w*|sign[- ]?in|password|verify|verification)\b", subject, re.I):
+        category = "security"
+    elif re.search(r"\b(renew\w*|expir\w*)\b", subject, re.I):
+        category = "renewal"
+    elif re.search(r"\b(invoice|payment|billing|receipt|charge)\b", subject, re.I):
+        category = "billing"
+    elif re.search(r"\b(upgrade|update|maintenance|deprecat\w*|migration)\b", subject, re.I):
+        category = "update"
+    account = re.search(r"\bfor account:\s*([^\r\n]{1,256})\s*$", subject, re.I)
+    account_hash = _hash("account", "cloudflare", account.group(1).strip().casefold()) if account else None
+    received = _parse_dt(row.get("received_at") or row.get("received") or row.get("date"))
+    date = received.date().isoformat() if received else None
+    # Unknown bindings must not collapse distinct accounts or undated incidents.
+    evidence = _evidence_id(row)
+    key = ("cloudflare", category, resource, period, account_hash or evidence, date or evidence)
+    if category != "usage_quota": key += (_hash("subject", subject.casefold()),)
+    return {"incident_id": _hash("incident", *key), "provider": "cloudflare", "category": category,
+            "resource": resource, "account_hash": account_hash,
+            "account_binding": "SUBJECT_ATTESTED" if account else "UNOBSERVED",
+            "received_utc_date": date, "window_basis": "received_utc_date_proxy" if date else "UNOBSERVED",
+            "provider_usage_window": None, "provider_authentication": "UNMEASURED",
+            "reported_budget_period": period,
+            "reported_level": level, "reported_percent": percent}
+
+
+def _row_signals(row: Dict[str, Any], text: str) -> List[str]:
+    signals = _signals(text)
+    notice = _cloudflare_notice(row)
+    if notice and notice["category"] != "other":
+        # Footer keywords and the generic word Alert cannot turn a usage notice
+        # into account-security work. The explicit subject category owns routing.
+        signals = [value for value in signals if value not in {"security", "finance", "subscription", "github", "legal"}]
+        required = {"security": "security", "billing": "finance", "renewal": "subscription"}.get(notice["category"])
+        for value in ("provider", required):
+            if value and value not in signals: signals.append(value)
+    return signals
+
+
+def _build_provider_notice_groups(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        notice = _cloudflare_notice(row)
+        if notice is None: continue
+        key = notice["incident_id"]
+        group = groups.setdefault(key, {key: value for key, value in notice.items()
+                                       if key not in {"reported_level", "reported_percent"}})
+        group.setdefault("schema", "uma.mail.provider_notice_group.v1")
+        group["message_count"] = group.get("message_count", 0) + 1
+        group.setdefault("evidence_ids", []).append(_evidence_id(row))
+        group.setdefault("reported_levels", [])
+        if notice["reported_level"]: group["reported_levels"].append(notice["reported_level"])
+        percent = notice["reported_percent"]
+        current = group.get("max_reported_percent")
+        group["max_reported_percent"] = current
+        if percent is not None:
+            group["max_reported_percent"] = max(current, percent) if current is not None else percent
+        occurred = _format_dt(_parse_dt(row.get("received_at") or row.get("received") or row.get("date")))
+        group.setdefault("received_at", [])
+        if occurred: group["received_at"].append(occurred)
+    for group in groups.values():
+        for key in ("evidence_ids", "reported_levels", "received_at"):
+            group[key] = sorted(set(group[key]))
+        group["qualification"] = "Mail-arrival cohort; no provider reset-window, recovery or mailbox-mutation claim."
+    return sorted(groups.values(), key=lambda value: value["incident_id"])
+
+
 def _mail_triage_labels(labels: Iterable[Any]) -> List[str]:
     return [
         label
@@ -443,7 +530,7 @@ def _build_evidence(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for row in rows:
         text = _text(row)
-        signals = _signals(text)
+        signals = _row_signals(row, text)
         provider_hints = _provider_hints(row, text)
         out.append(
             {
@@ -467,7 +554,7 @@ def _build_events(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for row in rows:
         text = _text(row)
-        signals = _signals(text)
+        signals = _row_signals(row, text)
         event_type = _event_type(signals)
         if not event_type:
             continue
@@ -527,7 +614,7 @@ def _build_opportunities(
         inbound_candidates = []
         for row in thread:
             text = _text(row)
-            signals = _signals(text)
+            signals = _row_signals(row, text)
             if _direction(row) != "inbound":
                 continue
             if "human_ask" not in signals and "question" not in signals:
@@ -577,7 +664,7 @@ def _build_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for row in rows:
         text = _text(row)
-        signals = _signals(text)
+        signals = _row_signals(row, text)
         kind = _kind_from_signals(signals)
         if kind is None:
             continue
@@ -596,6 +683,7 @@ def _build_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "provider_hints": _provider_hints(row, text),
                 "evidence_ids": [_evidence_id(row)],
                 "next_action": _next_action(kind, lane),
+                **({"provider_notice": _cloudflare_notice(row)} if _cloudflare_notice(row) else {}),
             }
         )
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -776,6 +864,7 @@ def build_historical_intelligence(
     events = _build_events(rows)
     opportunities = _build_opportunities(rows, now=checked_at, stale_days=stale_threshold)
     risks = _build_risks(rows)
+    provider_notice_groups = _build_provider_notice_groups(rows)
     entities = _build_entities(rows)
     timeline = _build_timeline(events, opportunities, risks)
     ops_snapshot, ops_lanes = _ops_lane_index(ops_report_path)
@@ -803,6 +892,8 @@ def build_historical_intelligence(
             "since": data.get("since"),
             "until_exclusive": data.get("until_exclusive"),
             "message_count": len(rows),
+            **({"input_coverage": data["source"]["coverage"]}
+               if isinstance(data.get("source"), dict) and isinstance(data["source"].get("coverage"), dict) else {}),
             "checked_at": _format_dt(checked_at),
             "stale_days": stale_threshold,
         },
@@ -817,6 +908,7 @@ def build_historical_intelligence(
             "opportunities": len(opportunities),
             "risks": len(risks),
             "evidence_items": len(evidence),
+            "provider_notice_groups": len(provider_notice_groups),
             "provider_hint_counts": provider_hint_counts,
             "provider_hint_total": sum(provider_hint_counts.values()),
             "represented_in_ops": reconciliation["kpis"]["represented_in_ops"],
@@ -832,6 +924,7 @@ def build_historical_intelligence(
         "events": events,
         "opportunities": opportunities,
         "risks": risks,
+        "provider_notice_groups": provider_notice_groups,
         "timeline": timeline,
         "reconciliation": reconciliation,
         "evidence": evidence,

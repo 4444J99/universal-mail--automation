@@ -4051,7 +4051,7 @@ Examples:
     )
     mail_history_export_parser.add_argument(
         "--source-type",
-        choices=["auto", "json", "jsonl", "mbox", "eml", "emlx", "emlx_dir"],
+        choices=["auto", "json", "jsonl", "mbox", "eml", "emlx", "emlx_dir", "apple_mail_cloudflare_index"],
         default="auto",
         help="Source parser to use (default: auto)",
     )

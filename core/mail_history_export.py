@@ -11,7 +11,11 @@ from __future__ import annotations
 import hashlib
 import json
 import mailbox
+import os
+import sqlite3
+import time
 from collections.abc import Iterable as IterableABC
+from contextlib import closing
 from datetime import datetime, timezone
 from email import policy
 from email.message import Message
@@ -408,6 +412,50 @@ def _detect_source_type(path: Path, requested: str) -> str:
     return "mbox"
 
 
+def _cloudflare_index_rows(path: Path, *, limit: Optional[int], since_dt: Optional[datetime],
+                           until_dt: Optional[datetime]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Read matching metadata in one SQLite snapshot; no message bodies or writes."""
+    maximum = int(limit) if limit is not None else 2000
+    where = "(lower(a.address) LIKE ? OR lower(a.address) LIKE ?)"
+    values: List[Any] = ["%@cloudflare.com", "%@%.cloudflare.com"]
+    if since_dt is not None:
+        where += " AND (m.date_received IS NULL OR m.date_received >= ?)"
+        values.append(since_dt.timestamp())
+    if until_dt is not None:
+        where += " AND (m.date_received IS NULL OR m.date_received < ?)"
+        values.append(until_dt.timestamp())
+    source = " FROM messages m JOIN addresses a ON a.ROWID=m.sender JOIN subjects s ON s.ROWID=m.subject WHERE " + where
+    deadline = time.monotonic() + 10
+    try:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as connection:
+            connection.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("BEGIN")
+            count = connection.execute("SELECT count(*)" + source, values).fetchone()[0]
+            if count > maximum and limit is None:
+                raise MailHistoryExportError("Cloudflare index query exceeds default bound; specify an explicit limit and retain incomplete coverage")
+            records = connection.execute(
+                "SELECT m.ROWID,a.address,s.subject,m.date_received,m.conversation_id,m.read" + source
+                + " ORDER BY m.date_received,m.ROWID LIMIT ?", [*values, maximum]).fetchall()
+    except sqlite3.Error as error:
+        raise MailHistoryExportError("Cloudflare Mail index query unavailable or schema unsupported") from error
+    rows = []
+    unknown_dates = 0
+    for identity, address, subject, received, conversation, read in records:
+        try:
+            date = datetime.fromtimestamp(received, timezone.utc) if received is not None else None
+        except (TypeError, ValueError, OverflowError, OSError):
+            date = None
+        if date is None: unknown_dates += 1
+        rows.append({"id": str(identity), "thread_id": str(conversation or identity), "address": address,
+                     "sender": address, "subject": subject, "received_at": _format_dt(date),
+                     "direction": "inbound", "state": "read" if read else "unread", "scope": "LocalIndex"})
+    return rows, {"coverage": {"scope": "local_mail_index_sender_domain_match", "matching_rows": count,
+                  "returned_rows": len(rows), "query_limit": maximum, "complete_for_local_query": count == len(rows),
+                  "unknown_received_dates": unknown_dates, "bodies_read": False, "attachments_read": False,
+                  "provider_authentication": "UNMEASURED"}}
+
+
 def _source_rows_from_path(
     path: Path,
     *,
@@ -415,12 +463,21 @@ def _source_rows_from_path(
     mailbox_hint: Optional[str],
     self_addresses: Iterable[str],
     body_char_limit: int,
+    source_limit: Optional[int] = None,
+    since_dt: Optional[datetime] = None,
+    until_dt: Optional[datetime] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     if not path.exists():
         raise MailHistoryExportError("mail history source not found", status_code=404)
     detected = _detect_source_type(path, source_type)
     source_name = path.name
     fallback_scope = _scope_from_path(path, mailbox_hint)
+
+    if detected == "apple_mail_cloudflare_index":
+        rows, metadata = _cloudflare_index_rows(path, limit=source_limit, since_dt=since_dt, until_dt=until_dt)
+        return [_normalize_row(row, source_key=f"{source_name}:{row['id']}", source_name=source_name,
+                               fallback_scope="LocalIndex", self_addresses=self_addresses, body_char_limit=0)
+                for row in rows], metadata
 
     if detected == "json":
         rows, metadata = _read_json_rows(path)
@@ -551,6 +608,9 @@ def build_mail_history_export(
         mailbox_hint=mailbox_hint,
         self_addresses=self_address_list,
         body_char_limit=body_limit,
+        source_limit=limit,
+        since_dt=since_dt,
+        until_dt=until_dt,
     )
     effective_since = since or source_metadata.get("since")
     effective_until = until_exclusive or source_metadata.get("until_exclusive")
@@ -579,6 +639,7 @@ def build_mail_history_export(
             "filename": path.name,
             "mailbox_hint": mailbox_hint,
             "message_count": len(rows),
+            **({"coverage": source_metadata["coverage"]} if "coverage" in source_metadata else {}),
         },
         "generated_at": _format_dt(generated_at),
         "since": effective_since,
@@ -600,13 +661,55 @@ def write_mail_history_export(
     *,
     pretty: bool = False,
     sort_keys: bool = False,
+    source_path: Optional[Union[Path, str]] = None,
+    source_identity: Optional[Tuple[int, int]] = None,
 ) -> Dict[str, Any]:
-    """Write a private export and return a stdout-safe receipt."""
+    """Write a private export; index exports require the pre-read source binding."""
     path = Path(output_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    source = export.get("source") or {}
+    is_index = isinstance(source, dict) and source.get("type") == "apple_mail_cloudflare_index"
+    if is_index and (source_path is None or source_identity is None):
+        raise MailHistoryExportError("Cloudflare index exports require source_path and source_identity")
+    protected_paths = []
+    if source_path is not None:
+        canonical_source = Path(source_path).expanduser().resolve()
+        protected_paths.append(canonical_source)
+        if is_index:
+            protected_paths.extend(Path(str(canonical_source) + suffix)
+                                   for suffix in ("-wal", "-shm", "-journal"))
+        if path.resolve() in protected_paths:
+            raise MailHistoryExportError("output must not identify the mail history source")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     payload = json.dumps(export, indent=2 if pretty else None, sort_keys=sort_keys)
-    path.write_text(payload + "\n", encoding="utf-8")
-    stat = path.stat()
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        opened_stat = os.fstat(stream.fileno())
+        opened_identity = (opened_stat.st_dev, opened_stat.st_ino)
+        protected_identities = {source_identity} if source_identity is not None else set()
+        for protected_path in protected_paths:
+            try:
+                current_source = protected_path.stat()
+            except FileNotFoundError:
+                if protected_path == protected_paths[0]:
+                    raise
+                continue
+            protected_identities.add((current_source.st_dev, current_source.st_ino))
+        if opened_identity in protected_identities:
+            raise MailHistoryExportError("output must not identify the mail history source")
+        destination = path.stat()
+        if (destination.st_dev, destination.st_ino) != opened_identity:
+            raise MailHistoryExportError("mail history export destination changed during writing")
+        if hasattr(os, "fchmod"):
+            os.fchmod(stream.fileno(), 0o600)
+        else:
+            os.chmod(path, 0o600)
+        os.ftruncate(stream.fileno(), 0)
+        stream.write(payload + "\n")
+        stream.flush()
+        stat = os.fstat(stream.fileno())
+        destination = path.stat()
+        if (destination.st_dev, destination.st_ino) != opened_identity:
+            raise MailHistoryExportError("mail history export destination changed during writing")
     return {
         "schema": MAIL_HISTORY_EXPORT_RECEIPT_SCHEMA,
         "status": "ok",

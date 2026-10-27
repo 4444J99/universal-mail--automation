@@ -1,0 +1,68 @@
+{
+  "action_groups": 121,
+  "files": {
+    "actions-final.json": {
+      "bytes": 193433,
+      "mode": "0o600",
+      "sha256": "440fae372ade793920814318166754d29b21e97e494507b95e977d8f85c2477b"
+    },
+    "history.json": {
+      "bytes": 312926,
+      "mode": "0o600",
+      "sha256": "b7f9650fef915b9f2be7da6f5790a058fac9c5ef6a11bbf29a47d421dfbe17bb"
+    },
+    "intelligence-final.json": {
+      "bytes": 1418153,
+      "mode": "0o600",
+      "sha256": "6c089d17f06feffffb296e271702ad977ead9867c04b51684fe9b452cf1de970"
+    }
+  },
+  "grouped_messages": 474,
+  "groups_by_category": {
+    "billing": 12,
+    "other": 237,
+    "renewal": 4,
+    "security": 3,
+    "update": 3,
+    "usage_quota": 96
+  },
+  "implementation": {
+    "cli.py": "8dc567326de3d3e654df1a4c0fb3f2606c7ca5b4b604ef8913a32fcc61b94b8b",
+    "core/historical_intelligence.py": "bebcbe26c2c5cad0462aec1de7185cf097ea7b9033a5fa83a7b0b2cdc83e5801",
+    "core/mail_action_plan.py": "4a58d0968b72a1792566c5412e8d8956c3dd49f246d5fc799b200f0c3144e8c0",
+    "core/mail_history_export.py": "12e5a465a5aba8df0424e9a91b28909848ef3ce653617a75c92ff24ae912d1ec",
+    "tests/test_cloudflare_notice_incidents.py": "1491e5731075e5435edd3044a94a9d8b0a44420d87bf836c3c9624dfa6b2738a"
+  },
+  "local_query_coverage": {
+    "attachments_read": false,
+    "bodies_read": false,
+    "complete_for_local_query": true,
+    "matching_rows": 474,
+    "provider_authentication": "UNMEASURED",
+    "query_limit": 2000,
+    "returned_rows": 474,
+    "scope": "local_mail_index_sender_domain_match",
+    "unknown_received_dates": 0
+  },
+  "mailbox_mutations": false,
+  "messages_by_category": {
+    "billing": 12,
+    "other": 237,
+    "renewal": 4,
+    "security": 3,
+    "update": 3,
+    "usage_quota": 215
+  },
+  "notice_groups": 355,
+  "observed_at": "2026-10-27T00:29:23Z",
+  "qualification": "Complete for this local sender-domain metadata query only; bodies and attachments were not read. Arrival UTC dates are proxies, not verified provider quota windows.",
+  "schema": "uma.cloudflare_notice_observation.v1",
+  "sends": false,
+  "source_base": "789b181255ab0784859d176eadb813db53b94e42",
+  "source_messages": 474,
+  "usage_messages_by_resource": {
+    "d1": 46,
+    "durable_objects": 30,
+    "kv": 139
+  }
+}

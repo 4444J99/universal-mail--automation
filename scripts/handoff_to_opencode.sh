@@ -32,10 +32,12 @@ echo "Repo: $REPO_DIR"
 echo "Handoff: $HANDOFF"
 echo "Target: OpenCode ($OPENCODE_BIN v1.18.30)"
 
-# 1. Check handoff exists
+# 1. Handoff is optional: work records live in the private archive, not in this
+#    public repo, so a fresh checkout has no local handoff file.
+HAVE_HANDOFF=1
 if [[ ! -f "$HANDOFF" ]]; then
-  echo "[ERROR] $HANDOFF not found. Cannot launch without active handoff." >&2
-  exit 1
+  HAVE_HANDOFF=0
+  echo "[INFO] $HANDOFF not present (optional local handoff; records live in the private archive). Continuing with $OPENCODE_MD only." >&2
 fi
 if [[ ! -f "$OPENCODE_MD" ]]; then
   echo "[WARN] $OPENCODE_MD not found." >&2
@@ -88,12 +90,18 @@ fi
 
 # 4. Formulate priming prompt
 #    Keep short — handoff is the source of truth, not a pasted blob.
-PROMPT="Read $HANDOFF and $OPENCODE_MD first. You are OpenCode v1.18.30 in $REPO_DIR. Honor all Hard Constraints (handoff §2: decoupled state via core/vault_sync.py + core/state.py → 4444J99/estate-vault, BRANCHES.md lanes, envelope doctrine, 1Password secrets). Run verification commands from handoff §5 before editing. Estate vault at ../estate-vault."
+if [[ "$HAVE_HANDOFF" -eq 1 ]]; then
+  PROMPT="Read $HANDOFF and $OPENCODE_MD first. You are OpenCode v1.18.30 in $REPO_DIR. Honor all Hard Constraints (handoff §2: decoupled state via core/vault_sync.py + core/state.py → 4444J99/estate-vault, BRANCHES.md lanes, envelope doctrine, 1Password secrets). Run verification commands from handoff §5 before editing. Estate vault at ../estate-vault."
+else
+  PROMPT="Read $OPENCODE_MD first. You are OpenCode v1.18.30 in $REPO_DIR. Honor BRANCHES.md lanes, the envelope doctrine and 1Password secrets; decoupled state goes through core/vault_sync.py + core/state.py → 4444J99/estate-vault. Estate vault at ../estate-vault."
+fi
 
 echo ""
 echo "== Ready =="
 echo "Prime prompt: $PROMPT"
-echo "Handoff sections: $(grep -c "^## " "$HANDOFF") sections, $(wc -l < "$HANDOFF") lines"
+if [[ "$HAVE_HANDOFF" -eq 1 ]]; then
+  echo "Handoff sections: $(grep -c "^## " "$HANDOFF") sections, $(wc -l < "$HANDOFF") lines"
+fi
 echo ""
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -110,5 +118,7 @@ if [[ ! -x "$OPENCODE_BIN" ]]; then
 fi
 
 echo "[LAUNCH] exec $OPENCODE_BIN"
-echo "  (handoff pre-loaded: $HANDOFF)"
+if [[ "$HAVE_HANDOFF" -eq 1 ]]; then
+  echo "  (handoff pre-loaded: $HANDOFF)"
+fi
 exec "$OPENCODE_BIN"

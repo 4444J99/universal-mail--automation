@@ -2,8 +2,9 @@
 
 Welcome to `universal-mail--automation` (UMA) and the wider `4444J99` estate.
 
-> **Before any work, read the formal handoff:** 👉 **[`.conductor/active-handoff.md`](.conductor/active-handoff.md)**
-> It carries trunk state, locked constraints, estate quota status, and next missions. Do not violate §2 Hard Constraints.
+> **Handoff is optional and local-only.** Work records moved to the private archive; if a local
+> `.conductor/active-handoff.md` exists, read it first (trunk state, locked constraints, next missions) and
+> honor its §2 Hard Constraints. A fresh checkout has none, and the launcher proceeds without it.
 
 ## Quick Start (zero-friction launcher)
 
@@ -15,7 +16,7 @@ Welcome to `universal-mail--automation` (UMA) and the wider `4444J99` estate.
 ./scripts/handoff_to_opencode.sh --dry-run
 
 # Manual fallback
-/opt/homebrew/bin/opencode  # then read .conductor/active-handoff.md first
+/opt/homebrew/bin/opencode  # then read .conductor/active-handoff.md first if it exists
 ```
 
 ## Architecture Quick Reference

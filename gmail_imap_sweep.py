@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""gmail_imap_sweep.py — archive Gmail noise by REMOVING the INBOX label over raw IMAP.
+"""gmail_imap_sweep.py — PROPOSE archiving Gmail noise over raw IMAP (observations
+queued for evidence review; no mailbox writes without an approved evidence plan).
 
 WHY this exists: Apple Mail cannot archive a Gmail *label* store. A "move to All Mail"
 is a no-op on the INBOX label (every message is already in All Mail), so Gmail re-asserts
@@ -13,10 +14,12 @@ fail-closed protected-sender gate and the operator's local never-archive allowli
 (config/protected_senders.local.txt, gitignored) hold identically — the dry-run
 classification already verified on the Apple-Mail path carries over unchanged.
 
-Reversible: archive drops ONLY the INBOX label; every thread stays in All Mail, and the
-JSON receipt records uid/sender/subject of everything touched = the exact undo manifest.
-Fires are flagged (a status bit). NEVER deletes, NEVER sends. Dry-run by default; --apply
-executes.
+Design reference (raw-IMAP capability): an archive would drop ONLY the INBOX label;
+every thread stays in All Mail, and the JSON receipt records uid/sender/subject of
+everything proposed = the exact undo manifest. FIRES are only proposed for flagging
+and noise only proposed for archiving — --apply submits observations to canonical
+research, never mutates the mailbox (an approved evidence plan, --dispatch, owns
+bounded writes). NEVER deletes, NEVER sends. Dry-run by default.
 
 Auth (keyless after one setup): IMAP_USER + a Gmail APP PASSWORD via IMAP_PASS or a
 1Password item (OP_ACCOUNT/OP_ITEM/OP_FIELD). An app password is required — OAuth/Apple-
@@ -198,12 +201,13 @@ def organize_flagged(provider, keepers, apply):
 def sweep_starred_noise(provider, limit, apply):
     """Drain the RESIDUAL flag pile: stars on threads that may already have left
     the inbox (so the inbox pass never sees them). Classify ``[Gmail]/Starred``
-    and unstar noise — the conservative classifier's 'archive' verdict PLUS
+    and propose un-starring noise — queued for evidence review, no direct mailbox
+    writes — for the conservative classifier's 'archive' verdict PLUS
     transactional/resolved/newsletter subjects (receipts, PIN/deposit/statement
     confirmations, resolved security alerts) that the inbox classifier keeps by
     sender. A hard CRITICAL keep-list (loan, KYC, litigation, recruiters, SSA
-    card, own sent mail) is NEVER unstarred. Reversible (a ``\\Flagged`` bit);
-    never archives or deletes. Fail-soft if [Gmail]/Starred is unavailable."""
+    card, own sent mail) is NEVER proposed for un-star. Never archives or deletes.
+    Fail-soft if [Gmail]/Starred is unavailable."""
     try:
         rows = classify(provider, STARRED_MAILBOX, limit)
     except Exception as e:
@@ -230,13 +234,14 @@ def sweep_starred_noise(provider, limit, apply):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Gmail IMAP sweep — archive noise by dropping the INBOX label (dry run by default).")
+        description="Gmail IMAP sweep — propose archive/flag dispositions for evidence review (dry run by default).")
     ap.add_argument("--user", default=os.getenv("IMAP_USER") or os.getenv("GMAIL_USER"),
                     help="mailbox address (or set IMAP_USER / GMAIL_USER); no default — names are not hardcoded")
     ap.add_argument("--limit", type=int, default=400)
     ap.add_argument("--mailbox", default="INBOX")
     ap.add_argument("--apply", action="store_true",
-                    help="actually flag/archive (default: dry run, no changes)")
+                    help="submit observations to canonical research for evidence review "
+                         "(default: dry run, no changes)")
     ap.add_argument("--dispatch", help="exact approved canonical transaction envelope")
     ap.add_argument("--receipt", default=None, help="path to write the JSON receipt / undo manifest")
     ap.add_argument("--no-starred", dest="sweep_starred", action="store_false", default=True,

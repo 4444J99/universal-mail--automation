@@ -17,8 +17,10 @@ domains. Three outcomes:
     KEEP    -> leave in inbox untouched (protected, ambiguous)           [safe]
     ARCHIVE -> mark read + move to <noise mailbox>                       [noise out]
 
-DRY RUN by default. --apply to act. Nothing deleted; noise → one reversible mailbox.
-Fail-open: a single message error never aborts the sweep. Writes a JSON receipt.
+DRY RUN by default. --apply submits the decided observations to canonical research —
+no mailbox writes: flags and archive moves happen only under an approved evidence
+plan (see --dispatch). Nothing deleted. Fail-open: a single message error never
+aborts the sweep. Writes a JSON receipt.
 """
 
 import argparse
@@ -490,11 +492,12 @@ def apply(account, inbox, rows, noise_mailbox, flag_only_gmail=False):
 
 def unflag_backlog_run(account, inbox, do_apply, receipt_path=None):
     """Backlog flag-hygiene pass: enumerate EVERY currently-flagged message in the
-    inbox, re-classify with the current rules, and clear the flag on those now judged
-    noise (archive). Reaches stars deeper than the bounded --limit inbox slice — the
+    inbox, re-classify with the current rules, and queue flag-review for those now
+    judged noise. Reaches stars deeper than the bounded --limit inbox slice — the
     accumulated residue of the looks_human over-fire + the dormant Tech/Security
-    labeler. Dry-run by default; NOTHING is archived or deleted, only flags cleared
-    (fully reversible). Writes a receipt naming every message whose flag it clears."""
+    labeler. Dry-run by default; NOTHING is archived, flagged, unflagged, or deleted —
+    flags stay untouched until an evidence plan is approved. Writes a receipt naming
+    every message it queues for flag review."""
     flagged = _list_flagged(account, inbox)
     decided = []
     for r in flagged:
@@ -554,8 +557,8 @@ def main(argv=None):
     ap.add_argument(
         "--unflag-noise",
         action="store_true",
-        help="backlog flag-hygiene: enumerate all flagged inbox messages and clear the "
-        "flag on those the classifier now judges noise (nothing archived/deleted)",
+        help="backlog flag-hygiene: enumerate all flagged inbox messages and queue "
+        "flag-review for those the classifier now judges noise (no mailbox writes)",
     )
     ap.add_argument("--noise-mailbox", default=NOISE_MAILBOX_DEFAULT)
     ap.add_argument("--receipt", default=None, help="path to write JSON receipt of all decisions")
@@ -589,7 +592,7 @@ def main(argv=None):
         result.update(apply(args.account, inbox, rows, args.noise_mailbox, flag_only_gmail=args.flag_only_gmail))
         print(f"  done: {result}")
     else:
-        print("\n  DRY RUN — no changes. Re-run with --apply to execute.")
+        print("\n  DRY RUN — no changes. Re-run with --apply to submit observations for evidence review.")
 
     receipt = args.receipt or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "audit", f"inbox_sweep-{args.account.replace('@', '_at_')}.json"

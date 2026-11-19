@@ -63,3 +63,12 @@ freeform private notes.
 
 The ledger may write local proof state only. It never sends, archives, labels,
 marks read, deletes, or changes provider/account state.
+
+## Follow-On Execution
+
+Use [mail-action-execute-v1.md](mail-action-execute-v1.md) to execute one
+approved action's mutations with the bounded guarantees (explicit approval,
+compare-and-set, canary-first, idempotency, post-write verification,
+recoverable receipts). The ledger receipt is record-only by design
+(`records_external_claim_only`); the execution receipt is the separate
+artifact that records what actually mutated.

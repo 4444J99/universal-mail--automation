@@ -16,6 +16,10 @@ ids, and next action.
 - UI: `/ops` Action Plan panel
 - Follow-on proof layer: `uma.mail.action_ledger.v1`
 - Follow-on draft layer: `uma.mail.draft_package.v1`
+- Follow-on execution layer: `uma.mail.action_execute.v1` — see
+  [mail-action-execute-v1.md](mail-action-execute-v1.md). The plan layer
+  never authorizes a mutation by itself; execution requires a separate
+  explicit approval on the execution request.
 
 ## Output Shape
 
